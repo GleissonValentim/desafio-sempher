@@ -1,56 +1,83 @@
-# Welcome to your Expo app 👋
+Objetivo do projeto
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Desenvolver um aplicativo mobile de loja virtual utilizando React Native, com consumo de API REST, armazenamento local e suporte ao funcionamento offline.
 
-## Get started
+Funcionalidades implementadas
 
-1. Install dependencies
+Listagem de produtos utilizando API REST.
 
-   ```bash
-   npm install
-   ```
+Visualização dos detalhes dos produtos.
 
-2. Start the app
+Adicionar e remover produtos do carrinho.
 
-   ```bash
-   npx expo start
-   ```
+Aumentar e diminuir a quantidade de produtos.
 
-In the output, you'll find options to open the app in a
+Cálculo do subtotal e total do carrinho.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Armazenamento de produtos e carrinho no SQLite.
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Consulta aos produtos armazenados quando estiver sem internet.
 
-## Get a fresh project
+Identificação da conexão com a internet.
 
-When you're ready, run:
+Registro de operações realizadas offline.
 
-```bash
-npm run reset-project
-```
+Sincronização das operações pendentes ao restabelecer a conexão.
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+Tecnologias utilizadas
 
-### Other setup steps
+React Native
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+JavaScript
 
-## Learn more
+Expo
 
-To learn more about developing your project with Expo, look at the following resources:
+SQLite
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+NetInfo
 
-## Join the community
+DummyJSON API
 
-Join our community of developers creating universal apps.
+Instalação e execução
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. Pré-requisitos
+
+Node.js instalado.
+
+npm instalado.
+
+Expo Go ou emulador Android/iOS.
+
+2. Clonar o repositório
+
+git clone URL_DO_REPOSITORIO
+
+3. Entrar na pasta do projeto
+
+cd NOME_DO_PROJETO
+
+4. Instalar as dependências
+
+npm install
+
+5. Executar o aplicativo
+
+npx expo start
+
+Após iniciar, utilize o QR Code com o Expo Go ou execute o aplicativo em um emulador compatível.
+
+API utilizada
+
+O projeto utiliza a API pública DummyJSON:
+
+https://dummyjson.com/
+
+Endpoints utilizados:
+
+GET /products: consulta os produtos.
+
+GET /products/{id}: consulta os detalhes de um produto.
+
+POST /carts/add: simula o envio de produtos ao carrinho.
+
+Observação: a API DummyJSON simula as operações de escrita, não mantendo as alterações permanentemente no servidor.
