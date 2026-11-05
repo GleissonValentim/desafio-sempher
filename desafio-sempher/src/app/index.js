@@ -4,9 +4,10 @@ import { View, Text, FlatList, ActivityIndicator, StyleSheet, } from 'react-nati
 
 import NetInfo from '@react-native-community/netinfo';
 
-import { getProdutos } from '../services/api';
+import { getProdutos, sincronizarCarrinho } from '../services/api';
 import ProdutoCard from '../components/ProdutoCard';
-import { criarTabelaProdutos, salvarProdutos, buscarProdutos, criarTabelaCarrinho, adicionarAoCarrinho, buscarCarrinho, removerDoCarrinho} from '../services/database';
+import { criarTabelaProdutos, salvarProdutos, buscarProdutos, criarTabelaCarrinho, adicionarAoCarrinho, buscarCarrinho, 
+  removerProdutoDoCarrinho, atualizarQuantidade, registrarOperacao, buscarOperacoesPendentes, marcarOperacaoSincronizada, listarTodasOperacoes, criarTabelaOperacoes} from '../services/database';
 import Carrinho from '../components/Carrinho';
 
 export default function ProdutosScreen() {
@@ -14,6 +15,7 @@ export default function ProdutosScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [carrinho, setCarrinho] = useState([]);
+  const [operacoesPendentes, setOperacoesPendentes] = useState(0);
 
   // Calcular o preco total do carrinho
   const totalCarrinho = carrinho.reduce( (total, item) => total + item.preco * item.quantidade,0);
@@ -24,7 +26,17 @@ export default function ProdutosScreen() {
   // Valida se há conexão com a internet
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      setOnline(state.isConnected);
+      const conectado =
+        state.isConnected &&
+        state.isInternetReachable !== false;
+
+      setOnline(conectado);
+
+      if (conectado) {
+        sincronizarOperacoes().catch((erro) => {
+          console.log('Erro ao sincronizar:', erro);
+        });
+      }
     });
 
     return () => unsubscribe();
@@ -38,37 +50,53 @@ export default function ProdutosScreen() {
       // Verificar a conexão atual
       const conexao = await NetInfo.fetch();
 
-      if (conexao.isConnected) {
+      if (conexao.isConnected && conexao.isInternetReachable !== false) {
+        try {
 
-        const data = await getProdutos();
+          const data = await getProdutos();
 
-        // Guardar os produtos no banco de dados
-        await salvarProdutos(data);
+          // Salvar os produtos no banco de dados
+          await salvarProdutos(data);
 
-        setProdutos(data);
+          setProdutos(data);
 
-      } else {
+        } catch (erro) {
 
-        // Se a API falhar, buscar os produtos no banco de dados
-        const produtosSalvos = await buscarProdutos();
+          // Se a API falhar, buscar no banco
+          console.log('API indisponível. Buscando produtos localmente.');
 
-        if (produtosSalvos.length > 0) {
-          setProdutos(
-            produtosSalvos.map((produto) => ({
+          const produtosSalvos = await buscarProdutos();
+
+          if (produtosSalvos.length > 0) {
+            setProdutos(produtosSalvos.map((produto) => ({
               id: produto.id,
               title: produto.nome,
               price: produto.preco,
               thumbnail: produto.imagem
-            }))
-          )
+            })));
+          } else {
+            setError('Não há produtos salvos para exibir offline.');
+          }
+        }
 
-          console.log('Produtos carregados com sucesso')
-          console.log(produtosSalvos)
+      } else {
+        // Se estiver offline, buscar diretamente no banco
+        const produtosSalvos = await buscarProdutos();
+
+        if (produtosSalvos.length > 0) {
+          setProdutos(produtosSalvos.map((produto) => ({
+            id: produto.id,
+            title: produto.nome,
+            price: produto.preco,
+            thumbnail: produto.imagem
+          })));
         } else {
-          setError('Não foi possível carregar os produtos.');
+          setError('Não há produtos salvos para exibir offline.');
         }
       }
+
     } catch (err) {
+      console.log('Erro ao carregar produtos:', err);
       setError('Não foi possível carregar os produtos.');
     } finally {
       setLoading(false);
@@ -78,31 +106,131 @@ export default function ProdutosScreen() {
   // Adicionar produto ao carrinho
   async function AdicionarProduto(produto) {
     try {
+  
+      // Localmente
       await adicionarAoCarrinho(produto);
 
-      const itens = await buscarCarrinho();
+      if (online) {
+        try {
 
+          // Envia a inclusão do produto para a API
+          await sincronizarCarrinho([
+            {
+              id: produto.id,
+              quantidade: 1
+            }
+          ]);
+
+          console.log('Produto enviado para a API!');
+        } catch (erroAPI) {
+
+          // Se a API falhar, registra para sincronizar depois
+          await registrarOperacao(
+            produto.id,
+            'adicionar',
+            1
+          );
+
+          console.log('Falha na API. Operação registrada como pendente.');
+        }
+      } else {
+
+        // Sem internet, registra a operação como pendente
+        await registrarOperacao(
+          produto.id,
+          'adicionar',
+          1
+        );
+      }
+
+      // Atualizar a quantidade de operações pendentes
+      await atualizarOperacoesPendentes();
+
+      // Atualiza o carrinho na tela
+      const itens = await buscarCarrinho();
       setCarrinho(itens);
 
-      console.log(`Produto ${produto.title} adicionado ao carrinho!`);
+      console.log(`${produto.title} adicionado ao carrinho!`);
+
     } catch (error) {
-      console.log('Erro ao adicionar produto ao carrinho:', error);
+      console.log('Erro ao adicionar produto:', error);
     }
   }
 
-  // Remover produto do carrinho
-  async function removerProdutoDoCarrinho(id, nome) {
+  // Atualiza a quantidade de produtos no carrinho
+  async function AtualizarQuantidadeCarrinho(id, quantidade) {
     try {
-      await removerDoCarrinho(id);
+      await atualizarQuantidade(id, quantidade);
+
+      if (!online) {
+        await registrarOperacao(
+           id,
+          'atualizar',
+          quantidade
+        );
+      }
+
+      await atualizarOperacoesPendentes();
 
       const itens = await buscarCarrinho();
 
       setCarrinho(itens);
+    } catch (error) {
+      console.log('Erro ao atualizar quantidade:', error);
+    }
+  }
 
-      console.log(`Produto ${nome} removido do carrinho!`);
+  async function removerProdutoCarrinho(id, nome) {
+    try {
+      await removerProdutoDoCarrinho(id);
+
+      if (!online) {
+        await registrarOperacao(
+          id,
+          'remover',
+          0
+        );
+      }
+
+      await atualizarOperacoesPendentes();
+
+      const itens = await buscarCarrinho();
+      setCarrinho(itens);
+
     } catch (error) {
       console.log('Erro ao remover produto do carrinho:', error);
     }
+  }
+
+  async function sincronizarOperacoes() {
+
+    // Buscar operações pendentes
+    const operacoes = await buscarOperacoesPendentes();
+
+    // Se não houver operações, não precisa sincronizar
+    if (operacoes.length === 0) {
+      return;
+    }
+
+    // Buscar o carrinho atualizado no banco de dados
+    const carrinhoAtual = await buscarCarrinho();
+
+    // Enviar o carrinho para a API
+    await sincronizarCarrinho(carrinhoAtual);
+
+    // Marcar todas as operações como sincronizadas
+    for (const operacao of operacoes) {
+      await marcarOperacaoSincronizada(operacao.id);
+    }
+
+    const TestesAPI = await buscarCarrinho();
+    console.log('Carrinho sincronizado com sucesso!');
+  }
+
+  async function atualizarOperacoesPendentes() {
+    const operacoes = await buscarOperacoesPendentes();
+
+    setOperacoesPendentes(operacoes.length);
   }
 
   // Ao iniciar a aplicação
@@ -119,10 +247,19 @@ export default function ProdutosScreen() {
         // Guardar os produtos vindos da API
         await loadProdutos();
 
+        // Criar a tabela de operações pendentes no banco de dados
+        await criarTabelaOperacoes();
+
+        await atualizarOperacoesPendentes();
+
         // Carregar os produtos do carrinho do banco de dados
         const itens = await buscarCarrinho();
 
         setCarrinho(itens);
+
+        const teste = await listarTodasOperacoes();
+
+        console.log('Operações pendentes:', teste);
       } catch (err) {
         
         setError(err.message);
@@ -153,6 +290,14 @@ export default function ProdutosScreen() {
   return (
     <View style={styles.container}>
 
+      {operacoesPendentes > 0 && (
+        <View style={styles.avisoPendente}>
+          <Text style={styles.textoPendente}>
+            Existem {operacoesPendentes} operações aguardando sincronização.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.meuCarrinho}>
         <Text style={styles.heading}>Meu carrinho ({carrinho.length})</Text>
 
@@ -163,7 +308,8 @@ export default function ProdutosScreen() {
             <Carrinho
               key={item.id}
               item={item}
-              onRemover={removerProdutoDoCarrinho}
+              remover={removerProdutoCarrinho}
+              atualizarQuantidade={AtualizarQuantidadeCarrinho}
             />
           ))
         )}
@@ -229,5 +375,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 10,
+  },
+
+  avisoPendente: {
+    backgroundColor: '#fff3cd',
+    padding: 12,
+    margin: 10,
+    borderRadius: 8,
+  },
+
+  textoPendente: {
+    color: '#856404',
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });

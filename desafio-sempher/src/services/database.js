@@ -91,7 +91,7 @@ export async function adicionarAoCarrinho(produto) {
 }
 
 // Remover produto do carrinho
-export async function removerDoCarrinho(id) {
+export async function removerProdutoDoCarrinho(id) {
   const db = await dbPromise;
 
   await db.runAsync(
@@ -106,12 +106,72 @@ export async function atualizarQuantidade(id, quantidade) {
 
   // Remover o produto se a quantidade igual a zero
   if (quantidade <= 0) {
-    await removerDoCarrinho(id);
+    await removerProdutoDoCarrinho(id);
     return;
   }
 
   await db.runAsync(
     'UPDATE carrinho SET quantidade = ? WHERE id = ?;',
     [quantidade, id]
+  );
+}
+
+// Criar tabela de operações pendentes (especifico para quando não a internet)
+export async function criarTabelaOperacoes() {
+  const db = await dbPromise;
+
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS operacoes_pendentes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      produto_id INTEGER NOT NULL,
+      tipo TEXT NOT NULL,
+      quantidade INTEGER,
+      sincronizado INTEGER DEFAULT 0
+    );
+  `);
+}
+
+// Criar tabela para saber qual operação está pendente
+export async function registrarOperacao(produtoId, tipo, quantidade) {
+  const db = await dbPromise;
+
+  await db.runAsync(
+    `INSERT INTO operacoes_pendentes
+     (produto_id, tipo, quantidade)
+     VALUES (?, ?, ?);`,
+    [produtoId, tipo, quantidade]
+  );
+}
+
+// Buscar operações que ainda não foram sincronizadas
+export async function buscarOperacoesPendentes() {
+  const db = await dbPromise;
+
+  const operacoes = await db.getAllAsync(
+    `SELECT * FROM operacoes_pendentes
+     WHERE sincronizado = 0
+     ORDER BY id ASC;`
+  );
+
+  return operacoes;
+}
+
+// Marcar uma operação como sincronizada
+export async function marcarOperacaoSincronizada(id) {
+  const db = await dbPromise;
+
+  await db.runAsync(
+    `UPDATE operacoes_pendentes
+     SET sincronizado = 1
+     WHERE id = ?;`,
+    [id]
+  );
+}
+
+export async function listarTodasOperacoes() {
+  const db = await dbPromise;
+
+  return await db.getAllAsync(
+    'SELECT * FROM operacoes_pendentes ORDER BY id ASC;'
   );
 }
